@@ -47,7 +47,7 @@ object GreeterBot {
 //#greeter-main
 object GreeterMain {
 
-  final case class SayHello(name: String)
+  case class SayHello(name: String)
 
   def apply(): Behavior[SayHello] =
     Behaviors.setup { context =>
