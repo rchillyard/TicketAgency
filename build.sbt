@@ -1,8 +1,8 @@
-name := "akka-quickstart-scala"
+name := "ticketagency"
 
 version := "1.0"
 
-scalaVersion := "2.13.1"
+scalaVersion := "2.13.5"
 
 lazy val akkaVersion = "2.6.13"
 
