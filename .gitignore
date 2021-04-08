@@ -11,3 +11,10 @@ target/
 .bloop
 
 /.bsp/sbt.json
+/sbt-dist/bin/sbt
+/sbt
+/sbt-dist/bin/sbt.bat
+/sbt.bat
+/sbt-dist/bin/sbt-launch.jar
+/sbt-dist/conf/sbtconfig.txt
+/sbt-dist/conf/sbtopts
