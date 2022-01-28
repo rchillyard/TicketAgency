@@ -1,12 +1,12 @@
 package com.phasmidsoftware.ticketagency
 
 import akka.actor.typed.scaladsl.Behaviors
-import akka.actor.typed.{ActorRef, Behavior}
+import akka.actor.typed.{ActorRef,Behavior}
 
 import scala.concurrent.duration.DurationInt
 import scala.util.{Failure, Success}
 
-object Agency {
+object Agency{
 
   def apply(): Behavior[Request] = createAgency(None)
 
@@ -26,7 +26,7 @@ object Agency {
           maybePool match {
             case Some(pool) =>
               implicit val timeout: akka.util.Timeout = 3.seconds
-              context.ask(pool, ref => ProformaTransaction(x, p, ref)) {
+              context.ask(pool.ref, ref => ProformaTransaction(x, p, ref)) {
                 case Success(TicketBlock(ts)) => Seats(ts)
                 case Success(x) => throw TicketAgencyException(s"wrong response: $x")
                 case Failure(x) => throw TicketAgencyException(s"failure: $x")
