@@ -8,33 +8,33 @@ import scala.util.{Failure, Success}
 
 object Agency{
 
-  def apply(): Behavior[Request] = createAgency(None)
+  def apply(): Behavior[Request] = createAgency(List.empty)
 
-  private def createAgency(maybePool: Option[ActorRef[Transaction]]): Behavior[Request] =
+  private def createAgency(maybePool: List[ActorRef[Transaction]]): Behavior[Request] =
     Behaviors.receive { (context, message) =>
       message match {
         case CreateTicketPool(ts) =>
           context.log.info(s"CreateTicketPool(${ts.size}) received")
-          maybePool match {
-            case None =>
-              context.log.info(s"createAgency with ticket pool: None")
-              createAgency(Some(context.spawn(TicketPool(ts, Nil), "ticketPool")))
-            case Some(_) => throw TicketAgencyException("pool already set up") // TODO allow other pools
-          }
+          context.log.info(s"createAgency with ticket pool no. ${maybePool.size}")
+          createAgency(maybePool.appended(context.spawn(TicketPool(ts, Nil), s"ticketPool-${maybePool.size}")))
         case SeatRequest(x, p) =>
-          context.log.info(s"SeatRequest($x, $p) received with maybePool = $maybePool")
-          maybePool match {
-            case Some(pool) =>
-              implicit val timeout: akka.util.Timeout = 3.seconds
-              context.ask(pool.ref, ref => ProformaTransaction(x, p, ref)) {
-                case Success(TicketBlock(ts)) => Seats(ts)
-                case Success(x) => throw TicketAgencyException(s"wrong response: $x")
-                case Failure(x) => throw TicketAgencyException(s"failure: $x")
-              }
-              Behaviors.same
-
-            case None => throw TicketAgencyException("no pool of tickets is available")
+          if(maybePool.nonEmpty) {
+            implicit val timeout: akka.util.Timeout = 15.seconds
+            val pool = scala.util.Random.shuffle(maybePool).head
+            context.log.info(s"SeatRequest($x, $p) received with maybePool = $pool")
+            context.ask(pool.ref, ref => ProformaTransaction(x, p, ref)) {
+              case Success(TicketBlock(ts)) => Seats(ts)
+              case Success(x) => throw TicketAgencyException(s"wrong response: $x")
+              case Failure(x) => throw TicketAgencyException(s"failure: $x")
+            }
           }
+          else {
+            throw TicketAgencyException("no pool of tickets is available")
+          }
+          Behaviors.same
+        case Seats(ts) =>
+          context.log.info(s"Seats booked $ts")
+          Behaviors.same
       }
     }
 }
