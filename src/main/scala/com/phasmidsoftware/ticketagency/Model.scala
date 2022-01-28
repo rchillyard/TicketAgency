@@ -6,4 +6,5 @@ case class Ticket(seat: Seat, price: Int)
 
 case class Payment(value: Int)
 
+case class TicketSet(ts: Set[Ticket])
 

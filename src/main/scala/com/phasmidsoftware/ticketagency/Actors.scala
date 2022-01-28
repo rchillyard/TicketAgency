@@ -3,9 +3,6 @@ package com.phasmidsoftware.ticketagency
 import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.{ActorRef, Behavior}
 
-import scala.concurrent.duration.DurationInt
-import scala.util.{Failure, Success}
-
 object Agency {
 
   def apply(): Behavior[Request] = createAgency(None)
@@ -13,7 +10,8 @@ object Agency {
   private def createAgency(maybePool: Option[ActorRef[Transaction]]): Behavior[Request] =
     Behaviors.receive { (context, message) =>
       message match {
-        case CreateTicketPool(ts) =>
+        case CreateTicketPool(ts, _) =>
+          // XXX we ignore the replyTo for now
           context.log.info(s"CreateTicketPool(${ts.size}) received")
           maybePool match {
             case None =>
@@ -21,20 +19,25 @@ object Agency {
               createAgency(Some(context.spawn(TicketPool(ts, Nil), "ticketPool")))
             case Some(_) => throw TicketAgencyException("pool already set up") // TODO allow other pools
           }
-        case SeatRequest(x, p) =>
-          context.log.info(s"SeatRequest($x, $p) received with maybePool = $maybePool")
-          maybePool match {
-            case Some(pool) =>
-              implicit val timeout: akka.util.Timeout = 3.seconds
-              context.ask(pool, ref => ProformaTransaction(x, p, ref)) {
-                case Success(TicketBlock(ts)) => Seats(ts)
-                case Success(x) => throw TicketAgencyException(s"wrong response: $x")
-                case Failure(x) => throw TicketAgencyException(s"failure: $x")
-              }
-              Behaviors.same
+//        case SeatRequest(x, p, r) =>
+//          context.log.info(s"SeatRequest($x, $p) received with maybePool = $maybePool")
+//          maybePool match {
+//            case Some(pool) =>
+//              implicit val timeout: akka.util.Timeout = 3.seconds
+//              context.ask(pool, ref => ProformaTransaction(x, p, ref)) {
+//                case Success(TicketBlock(ts)) => Seats(ts, r)
+//                case Success(x) => throw TicketAgencyException(s"wrong response: $x")
+//                case Failure(x) => throw TicketAgencyException(s"failure: $x")
+//              }
+//              Behaviors.same
+//
+//            case None => throw TicketAgencyException("no pool of tickets is available")
+//          }
+        case Seats(s, r) =>
+          context.log.info(s"Seats($s) received")
+          Behaviors.same // XXX for now
 
-            case None => throw TicketAgencyException("no pool of tickets is available")
-          }
+        case m => throw TicketAgencyException(s"unexpected message type: $m")
       }
     }
 }
