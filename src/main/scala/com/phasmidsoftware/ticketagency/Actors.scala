@@ -1,55 +1,58 @@
 package com.phasmidsoftware.ticketagency
 
 import akka.actor.typed.scaladsl.Behaviors
-import akka.actor.typed.{ActorRef, Behavior}
+import akka.actor.typed.{ActorRef,Behavior}
 
 import scala.concurrent.duration.DurationInt
-import scala.util.{Failure, Success}
 
-object Agency {
+object Agency{
 
-  def apply(): Behavior[Request] = createAgency(None)
+  def apply(): Behavior[Request] = createAgency(List.empty)
 
-  private def createAgency(maybePool: Option[ActorRef[Transaction]]): Behavior[Request] =
+  private def createAgency(maybePool: List[ActorRef[Transaction]]): Behavior[Request] =
     Behaviors.receive { (context, message) =>
       message match {
-        case CreateTicketPool(ts) =>
+        case CreateTicketPool(ts, replyTo) =>
           context.log.info(s"CreateTicketPool(${ts.size}) received")
-          maybePool match {
-            case None =>
-              context.log.info(s"createAgency with ticket pool: None")
-              createAgency(Some(context.spawn(TicketPool(ts, Nil), "ticketPool")))
-            case Some(_) => throw TicketAgencyException("pool already set up") // TODO allow other pools
+          context.log.info(s"createAgency with ticket pool no. ${maybePool.size}")
+          createAgency(maybePool.appended(context.spawn(TicketPool(ts, Nil), s"ticketPool-${maybePool.size}")))
+        case SeatRequest(x, p, replyTo) =>
+          //case for requesting 0 seat
+          if(x <= 0) {
+            throw TicketAgencyException("Seats must be greater than 0")
           }
-        case SeatRequest(x, p) =>
-          context.log.info(s"SeatRequest($x, $p) received with maybePool = $maybePool")
-          maybePool match {
-            case Some(pool) =>
-              implicit val timeout: akka.util.Timeout = 3.seconds
-              context.ask(pool, ref => ProformaTransaction(x, p, ref)) {
-                case Success(TicketBlock(ts)) => Seats(ts)
-                case Success(x) => throw TicketAgencyException(s"wrong response: $x")
-                case Failure(x) => throw TicketAgencyException(s"failure: $x")
-              }
-              Behaviors.same
-
-            case None => throw TicketAgencyException("no pool of tickets is available")
+          else if(maybePool.nonEmpty) {
+            implicit val timeout: akka.util.Timeout = 15.seconds
+            val pool = scala.util.Random.shuffle(maybePool).head
+            context.log.info(s"SeatRequest($x, $p) received with maybePool = $pool")
+            pool.ref ! ProformaTransaction(x, p, replyTo)
           }
+          else {
+            throw TicketAgencyException("no pool of tickets is available")
+          }
+          Behaviors.same
+        case seats: Seats =>
+          context.log.info(s"Seats booked ${seats.ts}")
+          Behaviors.same
       }
     }
 }
 
 object TicketSeller {
-  def apply(tickets: Set[Ticket], payments: List[Payment]): Behavior[Transaction] = processTransactions(tickets, payments)
+  def apply(tickets: Set[Ticket], payments: List[Payment]): Behavior[Transaction] =
+    processTransactions(tickets, payments)
 
   private def processTransactions(tickets: Set[Ticket], payments: List[Payment]): Behavior[Transaction] =
     if (tickets.nonEmpty)
       Behaviors.receive {
         (_, message) =>
           message match {
-            case CompletedTransaction(ticketsRequested, payment) =>
-              if ((ticketsRequested intersect tickets).size == ticketsRequested.size)
-                processTransactions(tickets diff ticketsRequested, payment :: payments)
+            case CompletedTransaction(ticketsRequested, payment, replyTo) =>
+              if ((ticketsRequested intersect tickets).size == ticketsRequested.size) {
+                val ts = tickets diff ticketsRequested
+                replyTo ! Seats(ticketsRequested)
+                processTransactions(ts, payment :: payments)
+              }
               else
                 throw new Exception("requested tickets are not available")
 
@@ -61,31 +64,29 @@ object TicketSeller {
 }
 
 object TicketPool {
-  def apply(tickets: Set[Ticket], payments: List[Payment]): Behavior[Transaction] = processTransactions(tickets, payments)
-
-  private def processTransactions(tickets: Set[Ticket], payments: List[Payment]): Behavior[Transaction] = {
-    Behaviors.receive {
-      (_, message) =>
-        message match {
-          case CompletedTransaction(ticketsRequested, payment) =>
-            if ((ticketsRequested intersect tickets).size == ticketsRequested.size)
-              makeBehavior(payment :: payments, tickets diff ticketsRequested)
-            else
-              throw new Exception("requested tickets are not available")
-
-          case ProformaTransaction(quantity, price, replyTo) =>
-            val ts: Set[Ticket] = tickets filter (t => t.price == price) take quantity
-            replyTo ! TicketBlock(ts)
-            makeBehavior(payments, tickets diff ts)
-        }
+  def apply(tickets: Set[Ticket], payments: List[Payment]): Behavior[Transaction] = {
+    Behaviors.setup { context =>
+      val ticketSeller = context
+        .spawn(TicketSeller(tickets, payments), "TicketSeller")
+      processTransactions(tickets, payments, ticketSeller)
     }
   }
 
-  private def makeBehavior(payments: List[Payment], ticketsRemaining: Set[Ticket]): Behavior[Transaction] = {
-    if (ticketsRemaining.nonEmpty)
-      processTransactions(ticketsRemaining, payments)
-    else
-      Behaviors.stopped
+  private def processTransactions(tickets: Set[Ticket],
+                                  payments: List[Payment],
+                                  ticketSeller: ActorRef[Transaction]): Behavior[Transaction] = {
+    Behaviors.receive {
+      (_, message) =>
+        message match {
+          case ProformaTransaction(quantity, price, replyTo) =>
+            val ts: Set[Ticket] = tickets filter (t => t.price == price) take quantity
+            ticketSeller ! CompletedTransaction(ts, Payment(price), replyTo)
+            if (ts.nonEmpty)
+              processTransactions(ts, payments, ticketSeller)
+            else
+              Behaviors.stopped
+        }
+    }
   }
 }
 
