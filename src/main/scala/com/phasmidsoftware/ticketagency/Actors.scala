@@ -1,11 +1,11 @@
 package com.phasmidsoftware.ticketagency
 
 import akka.actor.typed.scaladsl.Behaviors
-import akka.actor.typed.{ActorRef,Behavior}
+import akka.actor.typed.{ActorRef, Behavior}
 
 import scala.concurrent.duration.DurationInt
 
-object Agency{
+object Agency {
 
   def apply(): Behavior[Request] = createAgency(List.empty)
 
