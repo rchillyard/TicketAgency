@@ -7,30 +7,26 @@ import scala.concurrent.duration.DurationInt
 
 object Agency {
 
-  def apply(): Behavior[Request] = createAgency(List.empty)
+  def apply(): Behavior[Request] = create(List.empty)
 
-  private def createAgency(pools: List[ActorRef[Transaction]]): Behavior[Request] =
+  private def create(transactions: List[ActorRef[Transaction]]): Behavior[Request] =
     Behaviors.receive { (context, message) =>
       message match {
         case CreateTicketPool(ts, _) =>
           context.log.info(s"CreateTicketPool(${ts.size}) received")
-          context.log.info(s"createAgency with ticket pool no. ${pools.size}")
-          createAgency(pools.appended(context.spawn(TicketPool(ts, Nil), s"ticketPool-${pools.size}")))
+          context.log.info(s"create with ticket transaction no. ${transactions.size}")
+          create(transactions.appended(context.spawn(TicketPool(ts, Nil), s"ticketPool-${transactions.size}")))
         case SeatRequest(x, p, replyTo) =>
-          //case for requesting 0 seat
-          if (x <= 0) {
-            throw TicketAgencyException("Seats must be greater than 0")
-          }
-          else if (pools.nonEmpty) {
-            implicit val timeout: akka.util.Timeout = 15.seconds
-            val pool = scala.util.Random.shuffle(pools).head
-            context.log.info(s"SeatRequest($x, $p) received with pools = $pool")
-            pool.ref ! ProformaTransaction(x, p, replyTo)
-          }
-          else {
-            throw TicketAgencyException("no pool of tickets is available")
-          }
-          Behaviors.same
+          if (x > 0)
+            if (transactions.nonEmpty) {
+              implicit val timeout: akka.util.Timeout = 15.seconds
+              val transaction = scala.util.Random.shuffle(transactions).head
+              context.log.info(s"SeatRequest($x, $p) received with transaction = $transaction")
+              transaction.ref ! ProformaTransaction(x, p, replyTo)
+              Behaviors.same
+            }
+            else throw TicketAgencyException("no tickets available")
+          else throw TicketAgencyException("seats requested must be greater positive")
         case seats: Seats =>
           context.log.info(s"Seats booked ${seats.ts}")
           Behaviors.same
@@ -60,7 +56,8 @@ object TicketSeller {
           }
       }
     else {
-      System.err.println(s"All tickets sold for ${payments.sum}")
+      val z = implicitly[Counting[Payment]]
+      System.err.println(s"All tickets sold for ${payments.foldLeft(z.zero)((a,x) => z.plus(a,x))}")
       Behaviors.stopped
     }
 }
