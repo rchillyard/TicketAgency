@@ -11,33 +11,13 @@ object TicketAgency extends App {
 
   val ticketAgency: ActorSystem[Request] = ActorSystem(Agency(), "TicketAgency")
 
-  ticketAgency ! CreateTicketPool(tickets)
-  ticketAgency ! CreateTicketPool(tickets)
-  ticketAgency ! CreateTicketPool(tickets)
-  ticketAgency ! CreateTicketPool(tickets)
-  ticketAgency ! CreateTicketPool(tickets)
-  ticketAgency ! CreateTicketPool(tickets)
-  ticketAgency ! CreateTicketPool(tickets)
-  ticketAgency ! CreateTicketPool(tickets)
-  ticketAgency ! CreateTicketPool(tickets)
-  ticketAgency ! CreateTicketPool(tickets)
-  ticketAgency ! CreateTicketPool(tickets)
-  ticketAgency ! CreateTicketPool(tickets)
-
-  ticketAgency ! SeatRequest(2, 100)
-  ticketAgency ! SeatRequest(1, 100)
-  ticketAgency ! SeatRequest(3, 100)
-  ticketAgency ! SeatRequest(5, 100)
-  ticketAgency ! SeatRequest(1, 100)
-  ticketAgency ! SeatRequest(3, 100)
-  ticketAgency ! SeatRequest(5, 100)
-  ticketAgency ! SeatRequest(3, 100)
-  ticketAgency ! SeatRequest(6, 100)
-
-  //  val ticketSeller: ActorSystem[Transaction] = ActorSystem(TicketSeller(tickets,List(100,100,100)))
+  ticketAgency ! CreateTicketPool(tickets, ticketAgency.ref)
+  ticketAgency ! CreateTicketPool(tickets, ticketAgency.ref)
+  ticketAgency ! CreateTicketPool(tickets, ticketAgency.ref)
 
 
-  //add line on what to do with TicketSeller & TicketPool
-
+  ticketAgency ! SeatRequest(2, 100, ticketAgency.ref)
+  ticketAgency ! SeatRequest(1, 100, ticketAgency.ref)
+  ticketAgency ! SeatRequest(3, 100, ticketAgency.ref)
 
 }
